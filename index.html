@@ -219,5 +219,82 @@
       if(e.key==='Enter') makeBtn.click();
     });
   </script>
+  <!-- README Button -->
+  <button id="readmeBtn" style="position:fixed;bottom:20px;right:20px;width:40px;height:40px;border-radius:50%;border:none;background:#666;color:#fff;font-size:18px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);transition:all 0.2s;z-index:1000;" title="How to use">?</button>
+
+  <!-- README Modal -->
+  <div id="readmeModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1001;padding:20px;box-sizing:border-box;">
+    <div style="background:#fff;border-radius:12px;max-width:600px;margin:50px auto;padding:30px;max-height:80vh;overflow-y:auto;position:relative;">
+      <button id="closeModal" style="position:absolute;top:15px;right:20px;border:none;background:none;font-size:24px;cursor:pointer;color:#666;">&times;</button>
+      <h1 style="margin:0 0 20px 0;color:#333;font-size:1.8rem;">PDF → ZIP Tool</h1>
+      <p style="color:#666;margin:0 0 25px 0;">One-touch PDF bundling with smart clipboard integration.</p>
+      
+      <h2 style="color:#333;font-size:1.3rem;margin:25px 0 15px 0;">How It Works</h2>
+      <ol style="color:#444;line-height:1.6;padding-left:20px;">
+        <li><strong>Click the input box</strong> → Auto-fills with clipboard content</li>
+        <li><strong>Drag PDFs</strong> anywhere on the page (max 2 files)</li>
+        <li><strong>Hit Enter</strong> or click Download ZIP</li>
+      </ol>
+      
+      <h2 style="color:#333;font-size:1.3rem;margin:25px 0 15px 0;">Features</h2>
+      <ul style="color:#444;line-height:1.6;padding-left:20px;">
+        <li><strong>Smart autofill</strong>: Clipboard content automatically fills zip name on focus</li>
+        <li><strong>Drag anywhere</strong>: Drop PDFs on any part of the page</li>
+        <li><strong>Right-click download</strong>: Right-click anywhere to trigger download</li>
+        <li><strong>Enter to download</strong>: Press Enter from anywhere to download</li>
+        <li><strong>Auto-cleanup</strong>: Removes file extensions from clipboard text</li>
+      </ul>
+      
+      <h2 style="color:#333;font-size:1.3rem;margin:25px 0 15px 0;">Shortcuts</h2>
+      <ul style="color:#444;line-height:1.6;padding-left:20px;">
+        <li><strong>Enter</strong> → Download</li>
+        <li><strong>Right-click</strong> → Download</li>
+        <li><strong>Click input area</strong> → Focus + autofill</li>
+      </ul>
+      
+      <h2 style="color:#333;font-size:1.3rem;margin:25px 0 15px 0;">Limits</h2>
+      <ul style="color:#444;line-height:1.6;padding-left:20px;">
+        <li>Maximum 2 PDFs per ZIP</li>
+        <li>Name required for download</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // README modal functionality
+    const readmeBtn = document.getElementById('readmeBtn');
+    const readmeModal = document.getElementById('readmeModal');
+    const closeModal = document.getElementById('closeModal');
+    
+    readmeBtn.addEventListener('mouseover', () => {
+      readmeBtn.style.background = '#555';
+      readmeBtn.style.transform = 'scale(1.1)';
+    });
+    
+    readmeBtn.addEventListener('mouseout', () => {
+      readmeBtn.style.background = '#666';
+      readmeBtn.style.transform = 'scale(1)';
+    });
+    
+    readmeBtn.addEventListener('click', () => {
+      readmeModal.style.display = 'block';
+    });
+    
+    closeModal.addEventListener('click', () => {
+      readmeModal.style.display = 'none';
+    });
+    
+    readmeModal.addEventListener('click', (e) => {
+      if (e.target === readmeModal) {
+        readmeModal.style.display = 'none';
+      }
+    });
+    
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && readmeModal.style.display === 'block') {
+        readmeModal.style.display = 'none';
+      }
+    });
+  </script>
 </body>
 </html>
