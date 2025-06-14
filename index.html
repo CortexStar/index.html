@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -281,26 +282,27 @@
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
         const page = await pdf.getPage(1);
         
-        // Get page dimensions - lower scale for faster processing
-        const viewport = page.getViewport({ scale: 1.2 }); // Reduced from 1.5
+        // Higher resolution for better OCR accuracy
+        const viewport = page.getViewport({ scale: 2.0 });
         
-        // Create canvas for cropped area (top 20% of page)
+        // Larger crop - member ID might be lower than expected
+        const cropHeight = Math.floor(viewport.height * 0.4); // 40% of page
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
-        // Larger crop area to catch member ID
-        const cropHeight = Math.floor(viewport.height * 0.25); // Increased from 0.15
         canvas.width = viewport.width;
         canvas.height = cropHeight;
         
-        // Render PDF page to canvas with crop
-        const renderContext = {
+        // White background for better contrast
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        await page.render({
           canvasContext: ctx,
           viewport: viewport,
           transform: [1, 0, 0, 1, 0, 0]
-        };
+        }).promise;
         
-        await page.render(renderContext).promise;
         return canvas;
         
       } catch (error) {
@@ -311,15 +313,17 @@
 
     async function quickOCR(canvas) {
       try {
-        // Use Tesseract with speed-optimized settings
+        // Most aggressive OCR settings for member ID extraction
         const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
-          logger: () => {}, // Disable logging
-          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:- ',
+          logger: () => {},
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO, // Let Tesseract decide
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:- \n',
           preserve_interword_spaces: 1,
-          // Speed optimizations
           tessedit_ocr_engine_mode: Tesseract.OEM.LSTM_ONLY,
-          classify_bln_numeric_mode: 1
+          // Add these for better accuracy
+          tessedit_do_invert: 0,
+          classify_bln_numeric_mode: 0,
+          textord_really_old_xheight: 1
         });
         
         return text;
@@ -330,33 +334,32 @@
     }
 
     function findMemberID(text) {
-      // Clean the text
-      const cleanText = text.replace(/\s+/g, ' ').trim();
-      console.log('OCR extracted text:', cleanText); // Debug log
+      console.log('Raw OCR text:', text); // DEBUG - see what OCR actually reads
       
-      // Specific pattern for your format: Member ID : 10039094-OH-M1-1
-      const specificPattern = /Member\s+ID\s*:\s*([A-Z0-9-]+)/i;
-      let match = cleanText.match(specificPattern);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
+      // Clean and normalize text
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      console.log('Text lines:', lines); // DEBUG
       
-      // Alternative patterns in order of preference
-      const patterns = [
-        /Member\s*ID\s*:?\s*([A-Z0-9-]{8,})/i,        // Member ID: XXXXXXXXX
-        /ID\s*:\s*([A-Z0-9-]{8,})/i,                  // ID: XXXXXXXXX  
-        /([0-9]{8}-[A-Z0-9-]+)/g,                     // Pattern like 10039094-OH-M1-1
-        /([0-9]{7,}-[A-Z0-9-]+)/g,                    // Flexible number length
-        /([A-Z0-9]{8,}-[A-Z0-9-]+)/g,                 // Start with letters/numbers
-        /Member\s*:?\s*([A-Z0-9-]{6,})/i,             // Member: XXXXXX
-        /Account\s*(?:ID|#)?\s*:?\s*([A-Z0-9-]+)/i,   // Account ID/# 
-        /Policy\s*(?:ID|#)?\s*:?\s*([A-Z0-9-]+)/i     // Policy ID/#
-      ];
-      
-      for (const pattern of patterns) {
-        match = cleanText.match(pattern);
-        if (match && match[1] && match[1].length >= 6) {
-          return match[1].trim();
+      // Try each line separately
+      for (const line of lines) {
+        const patterns = [
+          // Most specific first
+          /Member\s*ID\s*:?\s*([A-Z0-9-]{8,})/i,
+          /ID\s*:?\s*([A-Z0-9-]{8,})/i,
+          /([0-9]{8}-[A-Z0-9-]+)/g,
+          /([0-9]{6,}-[A-Z0-9-]+)/g,
+          // Backup patterns
+          /Member\s*:?\s*([A-Z0-9-]{6,})/i,
+          /Policy\s*:?\s*([A-Z0-9-]{6,})/i,
+          /Account\s*:?\s*([A-Z0-9-]{6,})/i
+        ];
+        
+        for (const pattern of patterns) {
+          const match = line.match(pattern);
+          if (match && match[1] && match[1].length >= 6) {
+            console.log('Found member ID:', match[1]); // DEBUG
+            return match[1].trim();
+          }
         }
       }
       
