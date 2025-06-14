@@ -258,26 +258,21 @@
       }
     }
 
-    // ==================================================================
-    // == UPDATED FUNCTION WITH STRATEGY 1 (TEXT EXTRACTION + OCR FALLBACK)
-    // ==================================================================
     async function performOCRExtraction(pdfFile) {
       // --- STRATEGY 1: ATTEMPT DIRECT TEXT EXTRACTION FIRST ---
-      // This is extremely fast and works for most non-scanned PDFs.
       try {
         const arrayBuffer = await pdfFile.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
         const page = await pdf.getPage(1);
         const textContent = await page.getTextContent();
         
-        // Join the first ~30 text items. More than enough for the ID.
-        const text = textContent.items.slice(0, 30).map(item => item.str).join(' ');
+        const text = textContent.items.slice(0, 40).map(item => item.str).join(' ');
         
-        if (text.trim().length > 5) { // Check if we got any meaningful text
+        if (text.trim().length > 5) {
             const memberId = findMemberID(text);
             if (memberId) {
                 console.log('SUCCESS: Found ID via direct text extraction.');
-                return memberId; // Return the ID and skip OCR entirely
+                return memberId;
             }
         }
       } catch (e) {
@@ -285,7 +280,6 @@
       }
 
       // --- FALLBACK: USE OCR FOR IMAGE-BASED PDFs ---
-      // This part only runs if the fast text extraction method fails.
       console.log('Falling back to image-based OCR...');
       const imageData = await cropPDFTop(pdfFile);
       if (!imageData) throw new Error('Failed to process PDF for OCR');
@@ -302,25 +296,21 @@
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
         const page = await pdf.getPage(1);
         
-        // Higher resolution for better OCR accuracy
         const viewport = page.getViewport({ scale: 2.0 });
-        
-        // Crop a smaller portion of the page for faster OCR
-        const cropHeight = Math.floor(viewport.height * 0.3); // 30% of page
+        const cropHeight = Math.floor(viewport.height * 0.3);
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         
         canvas.width = viewport.width;
         canvas.height = cropHeight;
         
-        // White background for better contrast
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         await page.render({
           canvasContext: ctx,
           viewport: viewport,
-          transform: [1, 0, 0, 1, 0, 0] // No vertical offset, render from the top
+          transform: [1, 0, 0, 1, 0, 0]
         }).promise;
         
         return canvas;
@@ -333,7 +323,6 @@
 
     async function quickOCR(canvas) {
       try {
-        // Most aggressive OCR settings for member ID extraction
         const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
           logger: () => {},
           tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD,
@@ -349,36 +338,60 @@
       }
     }
 
+    // ==================================================================
+    // == UPDATED FUNCTION TO HANDLE NEW PDF FORMAT
+    // ==================================================================
     function findMemberID(text) {
-      console.log('Raw text for searching:', text); // DEBUG
-      
-      // Clean and normalize text
-      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-      
-      // Try each line separately
-      for (const line of lines) {
+        console.log('Raw text for searching:', text);
+
+        // Define regex patterns. More specific patterns are placed first for priority.
         const patterns = [
-          // Most specific first
-          /Member\s*ID\s*:?\s*([A-Z0-9-]{8,})/i,
-          /ID\s*:?\s*([A-Z0-9-]{8,})/i,
-          /([0-9]{8}-[A-Z0-9-]+)/g,
-          /([0-9]{6,}-[A-Z0-9-]+)/g,
-          // Backup patterns
-          /Member\s*:?\s*([A-Z0-9-]{6,})/i,
-          /Policy\s*:?\s*([A-Z0-9-]{6,})/i,
-          /Account\s*:?\s*([A-Z0-9-]{6,})/i
+            // NEW: Very specific pattern for "Member Id : XXXXX" format.
+            /Member\s*Id\s*:\s*([A-Z0-9-]{8,})/i,
+            
+            // Original pattern, still useful for "Member ID: XXXXX"
+            /Member\s*ID\s*:?\s*([A-Z0-9-]{8,})/i,
+            
+            // Generic ID pattern, useful if "Member ID" label is missing.
+            /ID\s*:?\s*([A-Z0-9-]{8,})/i,
+
+            // NEW: Specific structural patterns for IDs like "CA-C429636-2"
+            /\b([A-Z]{2}-[A-Z0-9]{6,}-[0-9])\b/i, 
+            
+            // Specific structural patterns for IDs like "10039094-OH-M1-1"
+            /\b([0-9]{8,}-[A-Z]{2,}-[A-Z0-9]{1,}-[0-9])\b/i,
+
+            // Original backup patterns
+            /Policy\s*:?\s*([A-Z0-9-]{6,})/i,
+            /Account\s*:?\s*([A-Z0-9-]{6,})/i
         ];
-        
+
+        // First, check the entire text block. This is ideal for space-joined text from direct extraction.
         for (const pattern of patterns) {
-          const match = line.match(pattern);
-          if (match && match[1] && match[1].length >= 6) {
-            console.log('Found member ID:', match[1]); // DEBUG
-            return match[1].trim();
-          }
+            const match = text.match(pattern);
+            // Ensure a match was found and the captured group exists and has a reasonable length.
+            if (match && match[1] && match[1].length >= 6) {
+                console.log('Found member ID with pattern:', pattern);
+                return match[1].trim();
+            }
         }
-      }
-      
-      return null;
+
+        // As a fallback for OCR'd text, split into lines and check each one.
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        if (lines.length > 1) {
+            for (const line of lines) {
+                for (const pattern of patterns) {
+                    const match = line.match(pattern);
+                    if (match && match[1] && match[1].length >= 6) {
+                        console.log('Found member ID on a specific line with pattern:', pattern);
+                        return match[1].trim();
+                    }
+                }
+            }
+        }
+
+        console.log('Member ID not found with any pattern.');
+        return null; // Return null if no match is found
     }
 
     /* ─── Clipboard & UI Functions (unchanged) ─── */
@@ -467,7 +480,6 @@
         if(f.type==='application/pdf') {
           files.push(f);
           
-          // Try AI extraction on first PDF
           if (files.length === 1) {
             await extractMemberID(f);
           }
@@ -475,10 +487,9 @@
       }
       render(); 
       
-      // Auto-download when we hit exactly 2 files and have a name
       if (files.length === 2 && zipNameEl.value.trim()) {
         msg('Auto-downloading...', true);
-        setTimeout(() => createZip(), 300); // Small delay for better UX
+        setTimeout(() => createZip(), 300);
       } else if (files.length === 2 && !zipNameEl.value.trim()) {
         msg('Enter a name to download');
       }
