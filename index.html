@@ -95,6 +95,9 @@
     .file-item button:hover{background:rgba(255,59,48,0.1);transform:scale(1.1)}
     .msg{font-size:1.05rem;text-align:center;color:#FF3B30;height:1.05em;margin-top:8px;font-weight:500}
     
+    /* Auto-download notification */
+    .auto-download-msg{font-size:1.05rem;text-align:center;color:#34C759;height:1.05em;margin-top:8px;font-weight:500}
+    
     @media(max-width:640px){
       .name-input{font-size:1.8rem}
       .download-btn{font-size:1.7rem}
@@ -115,6 +118,11 @@
       <h1 style="margin:0 0 8px 0;color:#1a1a1a;font-size:2rem;font-weight:700;">PDF → ZIP Tool</h1>
       <p style="color:#666;margin:0 0 30px 0;font-size:1.1rem;">One-touch PDF bundling with smart clipboard integration.</p>
       
+      <div style="background:linear-gradient(135deg, #34C759 0%, #30D158 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px;">
+        <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">✨ New: Auto-Download</h2>
+        <p style="margin:0;line-height:1.6;">When you drop the second PDF (maximum), the ZIP automatically downloads if a name is present. True one-touch workflow!</p>
+      </div>
+      
       <div style="background:linear-gradient(135deg, #FF9500 0%, #FF6B35 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:30px;">
         <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">⚡ Essential Setup for Best Experience</h2>
         <p style="margin:0 0 15px 0;font-weight:500;">To enable true one-touch workflow, disable Windows download dialog:</p>
@@ -130,12 +138,13 @@
       <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">How It Works</h2>
       <ol style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
         <li><strong>Click the input box</strong> → Auto-fills with clipboard content</li>
-        <li><strong>Drag PDFs</strong> anywhere on the page (max 2 files)</li>
-        <li><strong>Hit Enter</strong> or click Download ZIP</li>
+        <li><strong>Drag first PDF</strong> anywhere on the page</li>
+        <li><strong>Drag second PDF</strong> → Automatically downloads ZIP!</li>
       </ol>
       
       <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Features</h2>
       <ul style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
+        <li><strong>Auto-download</strong>: ZIP downloads automatically when 2 PDFs are added (if named)</li>
         <li><strong>Smart autofill</strong>: Clipboard content automatically fills zip name on focus</li>
         <li><strong>Drag anywhere</strong>: Drop PDFs on any part of the page</li>
         <li><strong>Right-click download</strong>: Right-click anywhere to trigger download</li>
@@ -148,6 +157,7 @@
         <li><strong>Enter</strong> → Download</li>
         <li><strong>Right-click</strong> → Download</li>
         <li><strong>Click input area</strong> → Focus + autofill</li>
+        <li><strong>Drop 2nd PDF</strong> → Auto-download (if named)</li>
       </ul>
       
       <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Limits</h2>
@@ -270,7 +280,10 @@
     fileInput.addEventListener('change', () => addFiles(fileInput.files));
 
     /* helpers */
-    const msg = t => { msgEl.textContent = t };
+    const msg = (t, isSuccess = false) => { 
+      msgEl.textContent = t; 
+      msgEl.className = isSuccess ? 'auto-download-msg' : 'msg';
+    };
     const mb  = b => (b/1048576).toFixed(1)+' MB';
     const render = () => {
       fileList.innerHTML = files.map((f,i)=>`
@@ -286,7 +299,14 @@
         if(files.length>=2){msg('Maximum two PDFs');break;}
         if(f.type==='application/pdf') files.push(f);
       }
-      render(); msg('');
+      render(); 
+      msg('');
+      
+      // Auto-download when we hit exactly 2 files and have a name
+      if (files.length === 2 && zipNameEl.value.trim()) {
+        msg('Auto-downloading...', true);
+        setTimeout(() => createZip(), 300); // Small delay for better UX
+      }
     }
 
     /* ─── 3. Create ZIP ─── */
