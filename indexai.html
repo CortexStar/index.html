@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF → ZIP · AI-Enhanced</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.4/dist/tesseract.min.js"></script>
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    /* ——— layout & visuals ——— */
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      height:100vh;display:flex;align-items:center;justify-content:center;
+      /* Warm paper background similar to Claude layered over original gradient */
+      background: 
+        /* Paper texture overlay */
+        radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 200, 124, 0.04) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.02) 0%, transparent 50%),
+        /* Subtle paper grain */
+        repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px),
+        /* Original gradient with warm paper tint */
+        linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',system-ui,sans-serif;
+      color:#1a1a1a;
+      position: relative;
+    }
+    
+    /* Subtle paper texture animation */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: 
+        radial-gradient(circle at 25% 25%, rgba(255, 200, 124, 0.02) 0%, transparent 50%),
+        radial-gradient(circle at 75% 75%, rgba(120, 119, 198, 0.02) 0%, transparent 50%);
+      animation: paperShift 20s ease-in-out infinite alternate;
+      pointer-events: none;
+      z-index: -1;
+    }
+    
+    @keyframes paperShift {
+      0% { opacity: 0.5; transform: translateX(0px) translateY(0px); }
+      100% { opacity: 0.8; transform: translateX(10px) translateY(-5px); }
+    }
+
+    .card{width:100%;max-width:1100px;height:100%;display:flex;flex-direction:column;
+           background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-radius:24px;
+           border:1px solid rgba(255,255,255,0.2);box-shadow:0 8px 32px rgba(0,0,0,0.1)}
+
+    /* giant input + button (upper ~25 vh) */
+    .input-wrap{flex:0 0 25vh;display:flex;align-items:center;justify-content:center;padding:1.5rem 2.5rem}
+    .inner{width:100%;height:100%;display:flex;flex-direction:column;gap:1.2rem}
+    .inner>*{width:100%}
+    .name-input{flex:1;border:2px solid rgba(0,0,0,0.08);border-radius:16px;font-size:2.2rem;
+                padding:.5em .7em;text-align:center;background:rgba(255,255,255,0.8);
+                transition:all 0.2s ease;backdrop-filter:blur(10px)}
+    .name-input:focus{outline:none;border-color:#007AFF;box-shadow:0 0 0 4px rgba(0,122,255,0.1);
+                      background:rgba(255,255,255,0.95)}
+    .name-input.processing{border-color:#FF9500;box-shadow:0 0 0 4px rgba(255,149,0,0.1);
+                           background:rgba(255,248,220,0.95)}
+    .download-btn{flex:0 0 12vh;background:linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+                  color:#fff;border:none;border-radius:16px;font-size:2rem;font-weight:600;
+                  cursor:pointer;transition:all 0.2s ease;box-shadow:0 4px 16px rgba(0,122,255,0.3)}
+    .download-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,122,255,0.4)}
+    .download-btn:active{transform:translateY(0)}
+
+    /* drag zone fills the rest */
+    .drop-zone{flex:1;border:2px dashed rgba(0,0,0,0.12);border-radius:20px;margin:1.5rem 2.5rem;
+               display:flex;flex-direction:column;align-items:center;justify-content:center;
+               cursor:pointer;text-align:center;transition:all 0.3s ease;
+               background:rgba(255,255,255,0.4);backdrop-filter:blur(10px)}
+    .drop-zone.drag{border-color:#007AFF;background:rgba(0,122,255,0.08);
+                    box-shadow:0 8px 32px rgba(0,122,255,0.15)}
+    .drop-zone:hover{border-color:rgba(0,122,255,0.5);background:rgba(255,255,255,0.6)}
+    .drop-zone input{display:none}
+    .drop-zone i{font-size:4rem;color:#007AFF;margin-bottom:1.2rem;transition:all 0.2s ease}
+    .drop-zone:hover i{transform:scale(1.05)}
+    .dz-title{font-size:1.6rem;font-weight:600;color:#1a1a1a;margin-bottom:0.5rem}
+    .dz-sub{font-size:1.05rem;color:#666;font-weight:400}
+
+    /* list & message */
+    .file-list{font-size:1.15rem;margin:1rem 2.5rem 0}
+    .file-item{background:rgba(255,255,255,0.8);border-radius:12px;padding:14px 18px;margin-top:12px;
+               display:flex;justify-content:space-between;align-items:center;
+               border:1px solid rgba(0,0,0,0.06);backdrop-filter:blur(10px);
+               transition:all 0.2s ease}
+    .file-item:hover{background:rgba(255,255,255,0.95);transform:translateY(-1px);
+                     box-shadow:0 4px 12px rgba(0,0,0,0.08)}
+    .file-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;color:#1a1a1a}
+    .file-item button{border:none;background:none;color:#FF3B30;font-size:1.4rem;cursor:pointer;
+                      border-radius:6px;padding:4px;transition:all 0.2s ease}
+    .file-item button:hover{background:rgba(255,59,48,0.1);transform:scale(1.1)}
+    .msg{font-size:1.05rem;text-align:center;color:#FF3B30;height:1.05em;margin-top:8px;font-weight:500}
+    
+    /* Auto-download notification */
+    .auto-download-msg{font-size:1.05rem;text-align:center;color:#34C759;height:1.05em;margin-top:8px;font-weight:500}
+    
+    /* AI processing message */
+    .ai-processing-msg{font-size:1.05rem;text-align:center;color:#FF9500;height:1.05em;margin-top:8px;font-weight:500}
+    .ai-success-msg{font-size:1.05rem;text-align:center;color:#34C759;height:1.05em;margin-top:8px;font-weight:500}
+    
+    @media(max-width:640px){
+      .name-input{font-size:1.8rem}
+      .download-btn{font-size:1.7rem}
+      .card{margin:10px;border-radius:20px}
+      .input-wrap,.file-list{margin-left:1.5rem;margin-right:1.5rem}
+      .drop-zone{margin-left:1.5rem;margin-right:1.5rem}
+    }
+  </style>
+</head>
+<body>
+  <!-- README Button -->
+  <button id="readmeBtn" style="position:fixed;bottom:20px;right:20px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(0,122,255,0.9);color:#fff;font-size:18px;cursor:pointer;box-shadow:0 4px 20px rgba(0,122,255,0.3);transition:all 0.3s ease;z-index:1000;backdrop-filter:blur(10px);font-weight:600;" title="How to use">?</button>
+
+  <!-- README Modal -->
+  <div id="readmeModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:1001;padding:20px;box-sizing:border-box;backdrop-filter:blur(8px);opacity:0;transition:opacity 0.3s ease;">
+    <div id="modalContent" style="background:rgba(255,255,255,0.98);backdrop-filter:blur(20px);border-radius:20px;max-width:650px;margin:40px auto;padding:40px;max-height:85vh;overflow-y:auto;position:relative;border:1px solid rgba(255,255,255,0.2);box-shadow:0 20px 40px rgba(0,0,0,0.15);transform:scale(0.9) translateY(20px);transition:all 0.3s ease;">
+      <button id="closeModal" style="position:absolute;top:20px;right:25px;border:none;background:rgba(0,0,0,0.05);border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;color:#666;transition:all 0.2s ease;">&times;</button>
+      <h1 style="margin:0 0 8px 0;color:#1a1a1a;font-size:2rem;font-weight:700;">PDF → ZIP Tool</h1>
+      <p style="color:#666;margin:0 0 30px 0;font-size:1.1rem;">AI-enhanced PDF bundling with smart member ID extraction.</p>
+      
+      <div style="background:linear-gradient(135deg, #34C759 0%, #30D158 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px;">
+        <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">✨ New: AI Member ID Extraction</h2>
+        <p style="margin:0;line-height:1.6;">Automatically extracts member ID from the top of your first PDF and fills the zip name. Combined with auto-download for true one-touch workflow!</p>
+      </div>
+      
+      <div style="background:linear-gradient(135deg, #FF9500 0%, #FF6B35 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:30px;">
+        <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">⚡ Essential Setup for Best Experience</h2>
+        <p style="margin:0 0 15px 0;font-weight:500;">To enable true one-touch workflow, disable Windows download dialog:</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.6;">
+          <li><strong>Open Settings</strong> → Search "Downloads"</li>
+          <li><strong>Click "Choose where to save downloaded files"</strong></li>
+          <li><strong>Turn OFF "Ask me what to do with each download"</strong></li>
+          <li><strong>Set default download location</strong> (e.g., Desktop or Downloads)</li>
+        </ol>
+        <p style="margin:15px 0 0 0;font-size:0.95rem;opacity:0.9;">Without this, you'll get a save dialog every time, breaking the seamless workflow.</p>
+      </div>
+      
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">How It Works</h2>
+      <ol style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
+        <li><strong>Drag first PDF</strong> → AI extracts member ID automatically</li>
+        <li><strong>Drag second PDF</strong> → Automatically downloads ZIP!</li>
+        <li><strong>Fallback</strong>: If ID not found, falls back to clipboard autofill</li>
+      </ol>
+      
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Features</h2>
+      <ul style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
+        <li><strong>AI member ID extraction</strong>: Automatically finds member ID from PDF top</li>
+        <li><strong>Auto-download</strong>: ZIP downloads automatically when 2 PDFs are added</li>
+        <li><strong>Smart fallback</strong>: Uses clipboard if AI extraction fails</li>
+        <li><strong>Drag anywhere</strong>: Drop PDFs on any part of the page</li>
+        <li><strong>Right-click download</strong>: Right-click anywhere to trigger download</li>
+        <li><strong>Enter to download</strong>: Press Enter from anywhere to download</li>
+      </ul>
+      
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Shortcuts</h2>
+      <ul style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
+        <li><strong>Enter</strong> → Download</li>
+        <li><strong>Right-click</strong> → Download</li>
+        <li><strong>Click input area</strong> → Focus + manual autofill</li>
+        <li><strong>Drop 1st PDF</strong> → AI extracts member ID</li>
+        <li><strong>Drop 2nd PDF</strong> → Auto-download</li>
+      </ul>
+      
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Limits</h2>
+      <ul style="color:#444;line-height:1.7;padding-left:20px;">
+        <li>Maximum 2 PDFs per ZIP</li>
+        <li>Member ID must be in top section of first PDF</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <!-- Name + button -->
+    <div class="input-wrap" id="inputWrap">
+      <div class="inner">
+        <input id="zipName" class="name-input" type="text" placeholder="Zip Name (AI will auto-fill)">
+        <button id="makeZip" class="download-btn">Download ZIP</button>
+      </div>
+    </div>
+
+    <!-- Drag zone -->
+    <label class="drop-zone" id="dropZone">
+      <input id="fileInput" type="file" accept="application/pdf" multiple>
+      <i class="fa-regular fa-file-pdf"></i>
+      <div class="dz-title">Drag &amp; Drop PDFs</div>
+      <div class="dz-sub">(or click to browse)</div>
+    </label>
+
+    <div id="fileList" class="file-list"></div>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <script>
+    /* —— DOM refs —— */
+    const zipNameEl = document.getElementById('zipName');
+    const makeBtn   = document.getElementById('makeZip');
+    const inputWrap = document.getElementById('inputWrap');
+    const dz        = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileList  = document.getElementById('fileList');
+    const msgEl     = document.getElementById('msg');
+
+    let files = [];
+    let isProcessingAI = false;
+
+    // Initialize PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    /* ─── AI Member ID Extraction ─── */
+    async function extractMemberID(pdfFile) {
+      if (isProcessingAI) return null;
+      isProcessingAI = true;
+      
+      try {
+        msg('🤖 Extracting member ID...', false, 'ai-processing');
+        zipNameEl.classList.add('processing');
+        
+        // Convert PDF to image (top crop only)
+        const imageData = await cropPDFTop(pdfFile);
+        if (!imageData) throw new Error('Failed to process PDF');
+        
+        // Run OCR on cropped image
+        const ocrText = await quickOCR(imageData);
+        if (!ocrText) throw new Error('OCR failed');
+        
+        // Extract member ID from text
+        const memberId = findMemberID(ocrText);
+        
+        if (memberId) {
+          zipNameEl.value = memberId;
+          msg(`✅ Member ID found: ${memberId}`, true, 'ai-success');
+          return memberId;
+        } else {
+          throw new Error('Member ID not found');
+        }
+        
+      } catch (error) {
+        console.log('AI extraction failed:', error.message);
+        msg('AI extraction failed, using clipboard fallback...', false);
+        
+        // Fallback to clipboard
+        await fillFromClipboard();
+        return null;
+        
+      } finally {
+        isProcessingAI = false;
+        zipNameEl.classList.remove('processing');
+        
+        // Clear message after 3 seconds
+        setTimeout(() => {
+          if (msgEl.textContent.includes('Member ID found') || msgEl.textContent.includes('extraction failed')) {
+            msg('');
+          }
+        }, 3000);
+      }
+    }
+
+    async function cropPDFTop(pdfFile) {
+      try {
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+        const page = await pdf.getPage(1);
+        
+        // Get page dimensions
+        const viewport = page.getViewport({ scale: 1.5 }); // Higher scale for better OCR
+        
+        // Create canvas for cropped area (top 15% of page)
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Crop dimensions - just the top portion
+        const cropHeight = Math.floor(viewport.height * 0.15);
+        canvas.width = viewport.width;
+        canvas.height = cropHeight;
+        
+        // Render PDF page to canvas with crop
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport,
+          transform: [1, 0, 0, 1, 0, 0] // No offset, we'll crop with canvas size
+        };
+        
+        await page.render(renderContext).promise;
+        
+        // Return image data for OCR
+        return canvas;
+        
+      } catch (error) {
+        console.error('PDF cropping failed:', error);
+        return null;
+      }
+    }
+
+    async function quickOCR(canvas) {
+      try {
+        // Use Tesseract with optimized settings for speed
+        const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
+          logger: () => {}, // Disable logging for speed
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:- ',
+          preserve_interword_spaces: 1
+        });
+        
+        return text;
+      } catch (error) {
+        console.error('OCR failed:', error);
+        return null;
+      }
+    }
+
+    function findMemberID(text) {
+      // Clean the text and get first 200 characters
+      const cleanText = text.replace(/\s+/g, ' ').trim().substring(0, 200);
+      
+      // Common member ID patterns
+      const patterns = [
+        /(?:Member\s*(?:ID|#)?\s*:?\s*)([A-Z0-9]+)/i,
+        /(?:ID\s*:?\s*)([A-Z0-9]{4,})/i,
+        /(?:Member\s*:?\s*)([A-Z0-9]{4,})/i,
+        /(?:Account\s*(?:ID|#)?\s*:?\s*)([A-Z0-9]+)/i,
+        /(?:Policy\s*(?:ID|#)?\s*:?\s*)([A-Z0-9]+)/i,
+        /([A-Z]{2,}[0-9]{3,})/g, // Pattern like ABC12345
+        /([0-9]{6,})/g // Pure number patterns 6+ digits
+      ];
+      
+      for (const pattern of patterns) {
+        const match = cleanText.match(pattern);
+        if (match && match[1] && match[1].length >= 4) {
+          return match[1].trim();
+        }
+      }
+      
+      return null;
+    }
+
+    /* ─── 1. Enhanced clipboard autofill ─── */
+    let clipboardAvailable = false;
+
+    // Check if clipboard is available
+    function checkClipboardAvailability() {
+      clipboardAvailable = !!(navigator.clipboard?.readText);
+    }
+
+    // Always try to read clipboard and fill input
+    async function fillFromClipboard() {
+      if (!clipboardAvailable) return false;
+      
+      try {
+        const clipText = await navigator.clipboard.readText();
+        const trimmedText = clipText.trim();
+        
+        if (trimmedText) {
+          // Clean the text - remove common file extensions
+          const cleanText = trimmedText.replace(/\.(zip|pdf|txt|doc|docx)$/i, '');
+          zipNameEl.value = cleanText;
+          return true;
+        }
+      } catch (error) {
+        // Permission denied or other error - disable future attempts
+        console.log('Clipboard access denied or failed');
+        clipboardAvailable = false;
+      }
+      return false;
+    }
+
+    // Initialize clipboard functionality
+    async function initClipboard() {
+      checkClipboardAvailability();
+      
+      if (clipboardAvailable) {
+        // Try to fill on page load
+        await fillFromClipboard();
+        
+        // Listen for clipboard permission changes
+        if (navigator.permissions) {
+          try {
+            const permission = await navigator.permissions.query({ name: 'clipboard-read' });
+            permission.addEventListener('change', () => {
+              checkClipboardAvailability();
+            });
+          } catch (e) {
+            // Some browsers don't support clipboard-read permission query
+          }
+        }
+      }
+    }
+
+    // Focus event handler - always try to fill from clipboard (manual override)
+    zipNameEl.addEventListener('focus', async () => {
+      if (!clipboardAvailable) {
+        checkClipboardAvailability(); // Re-check in case permissions changed
+      }
+      
+      if (clipboardAvailable && !zipNameEl.value.trim()) {
+        await fillFromClipboard();
+      }
+    });
+
+    // Initialize on page load
+    initClipboard();
+
+    // Touch anywhere on big header focuses the input
+    inputWrap.addEventListener('click', () => zipNameEl.focus());
+
+    /* ─── 2. Drag & drop everywhere ─── */
+    const highlight = on => dz.classList.toggle('drag', on);
+    ['dragenter','dragover'].forEach(t =>
+      window.addEventListener(t, e => { e.preventDefault(); highlight(true); }, false));
+    ['dragleave','drop'].forEach(t =>
+      window.addEventListener(t, e => { e.preventDefault(); highlight(false); }, false));
+    window.addEventListener('drop', e => addFiles(e.dataTransfer.files), false);
+    fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+    /* helpers */
+    const msg = (t, isSuccess = false, type = 'normal') => { 
+      msgEl.textContent = t; 
+      msgEl.className = type === 'ai-processing' ? 'ai-processing-msg' : 
+                       type === 'ai-success' ? 'ai-success-msg' :
+                       isSuccess ? 'auto-download-msg' : 'msg';
+    };
+    const mb  = b => (b/1048576).toFixed(1)+' MB';
+    const render = () => {
+      fileList.innerHTML = files.map((f,i)=>`
+        <div class="file-item">
+          <span title="${f.name}">${f.name} (${mb(f.size)})</span>
+          <button onclick="removeFile(${i})">&times;</button>
+        </div>`).join('');
+    };
+    window.removeFile = i => { files.splice(i,1); render(); msg(''); };
+
+    async function addFiles(list){
+      for(const f of list){
+        if(files.length>=2){msg('Maximum two PDFs');break;}
+        if(f.type==='application/pdf') {
+          files.push(f);
+          
+          // Try AI extraction on first PDF
+          if (files.length === 1) {
+            await extractMemberID(f);
+          }
+        }
+      }
+      render(); 
+      
+      // Auto-download when we hit exactly 2 files and have a name
+      if (files.length === 2 && zipNameEl.value.trim()) {
+        msg('Auto-downloading...', true);
+        setTimeout(() => createZip(), 300); // Small delay for better UX
+      } else if (files.length === 2 && !zipNameEl.value.trim()) {
+        msg('Enter a name to download');
+      }
+    }
+
+    /* ─── 3. Create ZIP ─── */
+    async function createZip(){
+      const name=(zipNameEl.value.trim()||'pdfs')+'.zip';
+      msg('Creating ZIP…');
+      const zip=new JSZip();
+      await Promise.all(files.map(f=>f.arrayBuffer().then(b=>zip.file(f.name,b))));
+      const blob=await zip.generateAsync({type:'blob'});
+      const a=Object.assign(document.createElement('a'),{
+        href:URL.createObjectURL(blob),download:name});
+      a.click(); URL.revokeObjectURL(a.href);
+      reset();
+    }
+
+    function tryDownload(){
+      if(!files.length)           {msg('Add at least one PDF');return;}
+      if(files.length>2)          {msg('Maximum two PDFs');return;}
+      if(!zipNameEl.value.trim()) {msg('Enter a name');return;}
+      createZip();
+    }
+    makeBtn.addEventListener('click', tryDownload);
+
+    /* right-click / two-finger click triggers download */
+    window.addEventListener('contextmenu', e=>{
+      if(e.target.closest('#zipName')) return;  // keep default menu in input
+      e.preventDefault(); tryDownload();
+    });
+
+    /* reset after download */
+    async function reset(){
+      files=[]; fileInput.value=''; render(); msg('');
+      zipNameEl.value='';          // start fresh
+      
+      // Fill from clipboard again after reset
+      if (clipboardAvailable) {
+        await fillFromClipboard();
+      }
+    }
+
+    /* Enter key turns into button click */
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Enter') makeBtn.click();
+    });
+
+   // README modal functionality
+    const readmeBtn = document.getElementById('readmeBtn');
+    const readmeModal = document.getElementById('readmeModal');
+    const modalContent = document.getElementById('modalContent');
+    const closeModal = document.getElementById('closeModal');
+    
+    readmeBtn.addEventListener('mouseover', () => {
+      readmeBtn.style.background = 'rgba(0,122,255,1)';
+      readmeBtn.style.transform = 'scale(1.1)';
+      readmeBtn.style.boxShadow = '0 6px 25px rgba(0,122,255,0.4)';
+    });
+    
+    readmeBtn.addEventListener('mouseout', () => {
+      readmeBtn.style.background = 'rgba(0,122,255,0.9)';
+      readmeBtn.style.transform = 'scale(1)';
+      readmeBtn.style.boxShadow = '0 4px 20px rgba(0,122,255,0.3)';
+    });
+    
+    closeModal.addEventListener('mouseover', () => {
+      closeModal.style.background = 'rgba(0,0,0,0.1)';
+    });
+    
+    closeModal.addEventListener('mouseout', () => {
+      closeModal.style.background = 'rgba(0,0,0,0.05)';
+    });
+    
+    readmeBtn.addEventListener('click', () => {
+      readmeModal.style.display = 'block';
+      requestAnimationFrame(() => {
+        readmeModal.style.opacity = '1';
+        modalContent.style.transform = 'scale(1) translateY(0)';
+      });
+    });
+    
+    function closeReadmeModal() {
+      readmeModal.style.opacity = '0';
+      modalContent.style.transform = 'scale(0.9) translateY(20px)';
+      setTimeout(() => {
+        readmeModal.style.display = 'none';
+      }, 300);
+    }
+    
+    closeModal.addEventListener('click', closeReadmeModal);
+    
+    // Close modal when clicking outside
+    readmeModal.addEventListener('click', (e) => {
+      if (e.target === readmeModal) {
+        closeReadmeModal();
+      }
+    });
+    
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && readmeModal.style.display === 'block') {
+        closeReadmeModal();
+      }
+    });
+  </script>
+</body>
+</html>
