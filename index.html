@@ -126,51 +126,41 @@
       
       <div style="background:linear-gradient(135deg, #34C759 0%, #30D158 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:20px;">
         <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">✨ New: AI Member ID Extraction</h2>
-        <p style="margin:0;line-height:1.6;">Automatically extracts member ID from the top of your first PDF and fills the zip name. Combined with auto-download for true one-touch workflow!</p>
+        <p style="margin:0;line-height:1.6;">Automatically extracts member ID from the top of your first PDF and fills the zip name. Combined with auto-download for a true one-touch workflow!</p>
       </div>
       
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">The One-Touch Workflow</h2>
+      <ol style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
+        <li><strong>Drop your first PDF.</strong> The system instantly reads the document and automatically fills the "Zip Name" with the Member ID. ✨</li>
+        <li><strong>Drop the second PDF.</strong> The moment the second file is added, the system automatically creates the ZIP file and downloads it. 💨</li>
+        <li><strong>That's it!</strong> The fields clear, ready for your next set. The entire process happens without a single click.</li>
+      </ol>
+
       <div style="background:linear-gradient(135deg, #FF9500 0%, #FF6B35 100%);color:#fff;padding:20px;border-radius:12px;margin-bottom:30px;">
         <h2 style="margin:0 0 12px 0;font-size:1.4rem;font-weight:600;">⚡ Essential Setup for Best Experience</h2>
-        <p style="margin:0 0 15px 0;font-weight:500;">To enable true one-touch workflow, disable Windows download dialog:</p>
+        <p style="margin:0 0 15px 0;font-weight:500;">To enable the one-touch workflow, you must disable the browser's "Save As" dialog:</p>
         <ol style="margin:0;padding-left:20px;line-height:1.6;">
-          <li><strong>Open Settings</strong> → Search "Downloads"</li>
-          <li><strong>Click "Choose where to save downloaded files"</strong></li>
-          <li><strong>Turn OFF "Ask me what to do with each download"</strong></li>
-          <li><strong>Set default download location</strong> (e.g., Desktop or Downloads)</li>
+          <li>Go to your browser's <strong>Settings</strong> and search for "Downloads".</li>
+          <li>Find the option labeled <strong>"Ask where to save each file before downloading"</strong>.</li>
+          <li><strong>Turn this setting OFF.</strong></li>
+          <li>You can also set a default download location (e.g., your Desktop or Downloads folder).</li>
         </ol>
         <p style="margin:15px 0 0 0;font-size:0.95rem;opacity:0.9;">Without this, you'll get a save dialog every time, breaking the seamless workflow.</p>
       </div>
       
-      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">How It Works</h2>
-      <ol style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
-        <li><strong>Drag first PDF</strong> → AI extracts member ID automatically</li>
-        <li><strong>Drag second PDF</strong> → Automatically downloads ZIP!</li>
-        <li><strong>Fallback</strong>: If ID not found, falls back to clipboard autofill</li>
-      </ol>
-      
-      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Features</h2>
+      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Core Features</h2>
       <ul style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
-        <li><strong>AI member ID extraction</strong>: Automatically finds member ID from PDF top</li>
-        <li><strong>Auto-download</strong>: ZIP downloads automatically when 2 PDFs are added</li>
-        <li><strong>Smart fallback</strong>: Uses clipboard if AI extraction fails</li>
-        <li><strong>Drag anywhere</strong>: Drop PDFs on any part of the page</li>
-        <li><strong>Right-click download</strong>: Right-click anywhere to trigger download</li>
-        <li><strong>Enter to download</strong>: Press Enter from anywhere to download</li>
-      </ul>
-      
-      <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Shortcuts</h2>
-      <ul style="color:#444;line-height:1.7;padding-left:20px;margin-bottom:25px;">
-        <li><strong>Enter</strong> → Download</li>
-        <li><strong>Right-click</strong> → Download</li>
-        <li><strong>Click input area</strong> → Focus + manual autofill</li>
-        <li><strong>Drop 1st PDF</strong> → AI extracts member ID</li>
-        <li><strong>Drop 2nd PDF</strong> → Auto-download</li>
+        <li><strong>Automatic Member ID Extraction</strong>: Instantly finds the member ID from the first PDF to name the file.</li>
+        <li><strong>Automatic ZIP & Download</strong>: Downloads automatically the moment two PDFs are in the list.</li>
+        <li><strong>Smart Fallback</strong>: Uses your clipboard content if the AI extraction ever fails.</li>
+        <li><strong>Drag Anywhere</strong>: Drop your PDFs on any part of the page to add them.</li>
+        <li><strong>Keyboard Shortcuts</strong>: Press `Enter` or `Right-Click` anywhere to trigger a manual download.</li>
       </ul>
       
       <h2 style="color:#1a1a1a;font-size:1.4rem;margin:0 0 15px 0;font-weight:600;">Limits</h2>
       <ul style="color:#444;line-height:1.7;padding-left:20px;">
-        <li>Maximum 2 PDFs per ZIP</li>
-        <li>Member ID must be in top section of first PDF</li>
+        <li>Maximum 2 PDFs per ZIP file.</li>
+        <li>Member ID should be located near the top of the first PDF.</li>
       </ul>
     </div>
   </div>
@@ -440,20 +430,15 @@
     };
     window.removeFile = i => { files.splice(i,1); render(); msg(''); };
 
-    // ==================================================================
-    // == UPDATED FUNCTION TO FIX MULTI-FILE DROP BEHAVIOR
-    // ==================================================================
     async function addFiles(list){
       let firstPdfForExtraction = null;
       
-      // This loop synchronously adds all dropped files to the `files` array.
       for(const f of list){
         if(files.length >= 2) {
           msg('Maximum two PDFs');
           break;
         }
         if(f.type === 'application/pdf') {
-          // Check if this is the very first file being added overall.
           if (files.length === 0) {
             firstPdfForExtraction = f;
           }
@@ -461,16 +446,12 @@
         }
       }
       
-      // Now, render the complete list of files.
       render(); 
       
-      // After adding the files, if we identified a "first file", 
-      // run the asynchronous extraction on it.
       if (firstPdfForExtraction) {
         await extractMemberID(firstPdfForExtraction);
       }
       
-      // Finally, check if the conditions for auto-download are met.
       if (files.length === 2 && zipNameEl.value.trim()) {
         msg('Auto-downloading...', true);
         setTimeout(() => createZip(), 300);
