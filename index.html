@@ -215,13 +215,12 @@
       if (isProcessingAI) return null;
       isProcessingAI = true;
       
-      const timeoutMs = 8000; // 8 second timeout
+      const timeoutMs = 8000;
       
       try {
         msg('🤖 Extracting member ID...', false, 'ai-processing');
         zipNameEl.classList.add('processing');
         
-        // Race between OCR/Text-Extraction and timeout
         const extractionPromise = performOCRExtraction(pdfFile);
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Extraction timeout')), timeoutMs)
@@ -241,7 +240,6 @@
         console.log('AI extraction failed:', error.message);
         msg('AI extraction failed, using clipboard fallback...', false);
         
-        // Fallback to clipboard
         await fillFromClipboard();
         return null;
         
@@ -249,7 +247,6 @@
         isProcessingAI = false;
         zipNameEl.classList.remove('processing');
         
-        // Clear message after 4 seconds
         setTimeout(() => {
           if (msgEl.textContent.includes('Member ID found') || msgEl.textContent.includes('extraction failed')) {
             msg('');
@@ -259,7 +256,6 @@
     }
 
     async function performOCRExtraction(pdfFile) {
-      // --- STRATEGY 1: ATTEMPT DIRECT TEXT EXTRACTION FIRST ---
       try {
         const arrayBuffer = await pdfFile.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
@@ -279,7 +275,6 @@
         console.warn('Direct text extraction failed, will fall back to OCR.', e);
       }
 
-      // --- FALLBACK: USE OCR FOR IMAGE-BASED PDFs ---
       console.log('Falling back to image-based OCR...');
       const imageData = await cropPDFTop(pdfFile);
       if (!imageData) throw new Error('Failed to process PDF for OCR');
@@ -338,45 +333,27 @@
       }
     }
 
-    // ==================================================================
-    // == UPDATED FUNCTION TO HANDLE NEW PDF FORMAT
-    // ==================================================================
     function findMemberID(text) {
         console.log('Raw text for searching:', text);
 
-        // Define regex patterns. More specific patterns are placed first for priority.
         const patterns = [
-            // NEW: Very specific pattern for "Member Id : XXXXX" format.
             /Member\s*Id\s*:\s*([A-Z0-9-]{8,})/i,
-            
-            // Original pattern, still useful for "Member ID: XXXXX"
             /Member\s*ID\s*:?\s*([A-Z0-9-]{8,})/i,
-            
-            // Generic ID pattern, useful if "Member ID" label is missing.
             /ID\s*:?\s*([A-Z0-9-]{8,})/i,
-
-            // NEW: Specific structural patterns for IDs like "CA-C429636-2"
             /\b([A-Z]{2}-[A-Z0-9]{6,}-[0-9])\b/i, 
-            
-            // Specific structural patterns for IDs like "10039094-OH-M1-1"
             /\b([0-9]{8,}-[A-Z]{2,}-[A-Z0-9]{1,}-[0-9])\b/i,
-
-            // Original backup patterns
             /Policy\s*:?\s*([A-Z0-9-]{6,})/i,
             /Account\s*:?\s*([A-Z0-9-]{6,})/i
         ];
 
-        // First, check the entire text block. This is ideal for space-joined text from direct extraction.
         for (const pattern of patterns) {
             const match = text.match(pattern);
-            // Ensure a match was found and the captured group exists and has a reasonable length.
             if (match && match[1] && match[1].length >= 6) {
                 console.log('Found member ID with pattern:', pattern);
                 return match[1].trim();
             }
         }
 
-        // As a fallback for OCR'd text, split into lines and check each one.
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
         if (lines.length > 1) {
             for (const line of lines) {
@@ -391,10 +368,10 @@
         }
 
         console.log('Member ID not found with any pattern.');
-        return null; // Return null if no match is found
+        return null;
     }
 
-    /* ─── Clipboard & UI Functions (unchanged) ─── */
+    /* ─── Clipboard & UI Functions ─── */
     let clipboardAvailable = false;
 
     function checkClipboardAvailability() {
@@ -403,11 +380,9 @@
 
     async function fillFromClipboard() {
       if (!clipboardAvailable) return false;
-      
       try {
         const clipText = await navigator.clipboard.readText();
         const trimmedText = clipText.trim();
-        
         if (trimmedText) {
           const cleanText = trimmedText.replace(/\.(zip|pdf|txt|doc|docx)$/i, '');
           zipNameEl.value = cleanText;
@@ -422,27 +397,20 @@
 
     async function initClipboard() {
       checkClipboardAvailability();
-      
       if (clipboardAvailable) {
         await fillFromClipboard();
         if (navigator.permissions) {
           try {
             const permission = await navigator.permissions.query({ name: 'clipboard-read' });
-            permission.addEventListener('change', () => {
-              checkClipboardAvailability();
-            });
-          } catch (e) { /* not supported in all browsers */ }
+            permission.addEventListener('change', () => checkClipboardAvailability());
+          } catch (e) { /* not supported */ }
         }
       }
     }
 
     zipNameEl.addEventListener('focus', async () => {
-      if (!clipboardAvailable) {
-        checkClipboardAvailability();
-      }
-      if (clipboardAvailable && !zipNameEl.value.trim()) {
-        await fillFromClipboard();
-      }
+      if (!clipboardAvailable) checkClipboardAvailability();
+      if (clipboardAvailable && !zipNameEl.value.trim()) await fillFromClipboard();
     });
 
     initClipboard();
@@ -450,10 +418,8 @@
 
     /* Drag & drop */
     const highlight = on => dz.classList.toggle('drag', on);
-    ['dragenter','dragover'].forEach(t =>
-      window.addEventListener(t, e => { e.preventDefault(); highlight(true); }, false));
-    ['dragleave','drop'].forEach(t =>
-      window.addEventListener(t, e => { e.preventDefault(); highlight(false); }, false));
+    ['dragenter','dragover'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); highlight(true); }, false));
+    ['dragleave','drop'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); highlight(false); }, false));
     window.addEventListener('drop', e => addFiles(e.dataTransfer.files), false);
     fileInput.addEventListener('change', () => addFiles(fileInput.files));
 
@@ -474,19 +440,37 @@
     };
     window.removeFile = i => { files.splice(i,1); render(); msg(''); };
 
+    // ==================================================================
+    // == UPDATED FUNCTION TO FIX MULTI-FILE DROP BEHAVIOR
+    // ==================================================================
     async function addFiles(list){
+      let firstPdfForExtraction = null;
+      
+      // This loop synchronously adds all dropped files to the `files` array.
       for(const f of list){
-        if(files.length>=2){msg('Maximum two PDFs');break;}
-        if(f.type==='application/pdf') {
-          files.push(f);
-          
-          if (files.length === 1) {
-            await extractMemberID(f);
+        if(files.length >= 2) {
+          msg('Maximum two PDFs');
+          break;
+        }
+        if(f.type === 'application/pdf') {
+          // Check if this is the very first file being added overall.
+          if (files.length === 0) {
+            firstPdfForExtraction = f;
           }
+          files.push(f);
         }
       }
+      
+      // Now, render the complete list of files.
       render(); 
       
+      // After adding the files, if we identified a "first file", 
+      // run the asynchronous extraction on it.
+      if (firstPdfForExtraction) {
+        await extractMemberID(firstPdfForExtraction);
+      }
+      
+      // Finally, check if the conditions for auto-download are met.
       if (files.length === 2 && zipNameEl.value.trim()) {
         msg('Auto-downloading...', true);
         setTimeout(() => createZip(), 300);
