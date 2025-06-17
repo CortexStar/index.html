@@ -213,7 +213,6 @@
 
     let files = [];
     let isProcessingAI = false;
-    let isAwaitingEnterForSimilarFiles = false; // <-- NEW: Flag for similarity warning
 
     // Initialize PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -446,7 +445,7 @@
           <button onclick="removeFile(${i})">&times;</button>
         </div>`).join('');
     };
-    window.removeFile = i => { files.splice(i,1); render(); msg(''); isAwaitingEnterForSimilarFiles = false; };
+    window.removeFile = i => { files.splice(i,1); render(); msg(''); };
 
     async function addFiles(list){
       let firstPdfForExtraction = null;
@@ -470,7 +469,7 @@
         await extractMemberID(firstPdfForExtraction);
       }
       
-      // MODIFIED: Logic for auto-download and file size check
+      // MODIFIED: Logic for auto-download and file size check using a confirm pop-up
       if (files.length === 2 && zipNameEl.value.trim()) {
         const size1 = files[0].size;
         const size2 = files[1].size;
@@ -478,13 +477,28 @@
         const smaller = Math.min(size1, size2);
         const ratio = smaller > 0 ? larger / smaller : 0;
 
-        // If one file is less than 1.5x the size of the other, warn the user.
+        // If one file is less than 1.5x the size of the other, show a confirm dialog.
         if (ratio < 1.5) {
-          msg('Files are similar in size. Press Enter to confirm download.');
-          isAwaitingEnterForSimilarFiles = true; // Set flag to wait for Enter key
+          // Use requestAnimationFrame to ensure the UI has rendered the new file before the blocking dialog appears.
+          requestAnimationFrame(() => {
+            const userConfirmed = window.confirm(
+              "Warning: The two PDF files are very similar in size.\n\n" +
+              "This might mean the 'Assessment' and 'Notes' files are incorrect. The Assessment file should be much larger.\n\n" +
+              "Click OK to create the ZIP file anyway."
+            );
+
+            if (userConfirmed) {
+              // User confirmed, proceed with zipping
+              createZip();
+            } else {
+              // User cancelled. Do nothing, leave files for manual removal.
+              msg('Download cancelled by user.');
+            }
+          });
         } else {
+          // Sizes are different enough, proceed with normal auto-download
           msg('Auto-downloading...', true);
-          setTimeout(() => createZip(), 300); // Proceed with normal auto-download
+          setTimeout(() => createZip(), 300);
         }
       } else if (files.length === 2 && !zipNameEl.value.trim()) {
         msg('Enter a name to download');
@@ -521,23 +535,15 @@
     async function reset(){
       files=[]; fileInput.value=''; render(); msg('');
       zipNameEl.value='';
-      isAwaitingEnterForSimilarFiles = false; // <-- NEW: Reset flag
       
       if (clipboardAvailable) {
         await fillFromClipboard();
       }
     }
 
-    // MODIFIED: Enter key listener to handle the new warning state
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        if (isAwaitingEnterForSimilarFiles) {
-          isAwaitingEnterForSimilarFiles = false; // Reset the flag
-          createZip(); // Proceed with download
-        } else {
-          makeBtn.click(); // Default behavior
-        }
-      }
+    // Enter key triggers the main download button
+    document.addEventListener('keydown', e=>{
+      if(e.key==='Enter') makeBtn.click();
     });
 
     // README and Extension modal functionality
@@ -547,7 +553,6 @@
     const modalContent = document.getElementById('modalContent');
     const closeModal = document.getElementById('closeModal');
     
-    // MODIFIED: Event listener for the extension button to link to the repo
     extensionBtn.addEventListener('click', () => {
         const extensionUrl = 'https://github.com/CortexStar/Audit-Extension-.git'; 
         window.open(extensionUrl, '_blank');
