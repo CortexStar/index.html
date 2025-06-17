@@ -204,15 +204,16 @@
   <script>
     /* —— DOM refs —— */
     const zipNameEl = document.getElementById('zipName');
-    const makeBtn    = document.getElementById('makeZip');
+    const makeBtn   = document.getElementById('makeZip');
     const inputWrap = document.getElementById('inputWrap');
-    const dz         = document.getElementById('dropZone');
+    const dz        = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
     const fileList  = document.getElementById('fileList');
-    const msgEl      = document.getElementById('msg');
+    const msgEl     = document.getElementById('msg');
 
     let files = [];
     let isProcessingAI = false;
+    let isAwaitingEnterForSimilarFiles = false; // <-- NEW: Flag for similarity warning
 
     // Initialize PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -445,7 +446,7 @@
           <button onclick="removeFile(${i})">&times;</button>
         </div>`).join('');
     };
-    window.removeFile = i => { files.splice(i,1); render(); msg(''); };
+    window.removeFile = i => { files.splice(i,1); render(); msg(''); isAwaitingEnterForSimilarFiles = false; };
 
     async function addFiles(list){
       let firstPdfForExtraction = null;
@@ -469,9 +470,22 @@
         await extractMemberID(firstPdfForExtraction);
       }
       
+      // MODIFIED: Logic for auto-download and file size check
       if (files.length === 2 && zipNameEl.value.trim()) {
-        msg('Auto-downloading...', true);
-        setTimeout(() => createZip(), 300);
+        const size1 = files[0].size;
+        const size2 = files[1].size;
+        const larger = Math.max(size1, size2);
+        const smaller = Math.min(size1, size2);
+        const ratio = smaller > 0 ? larger / smaller : 0;
+
+        // If one file is less than 1.5x the size of the other, warn the user.
+        if (ratio < 1.5) {
+          msg('Files are similar in size. Press Enter to confirm download.');
+          isAwaitingEnterForSimilarFiles = true; // Set flag to wait for Enter key
+        } else {
+          msg('Auto-downloading...', true);
+          setTimeout(() => createZip(), 300); // Proceed with normal auto-download
+        }
       } else if (files.length === 2 && !zipNameEl.value.trim()) {
         msg('Enter a name to download');
       }
@@ -507,27 +521,35 @@
     async function reset(){
       files=[]; fileInput.value=''; render(); msg('');
       zipNameEl.value='';
+      isAwaitingEnterForSimilarFiles = false; // <-- NEW: Reset flag
       
       if (clipboardAvailable) {
         await fillFromClipboard();
       }
     }
 
-    document.addEventListener('keydown', e=>{
-      if(e.key==='Enter') makeBtn.click();
+    // MODIFIED: Enter key listener to handle the new warning state
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        if (isAwaitingEnterForSimilarFiles) {
+          isAwaitingEnterForSimilarFiles = false; // Reset the flag
+          createZip(); // Proceed with download
+        } else {
+          makeBtn.click(); // Default behavior
+        }
+      }
     });
 
     // README and Extension modal functionality
     const readmeBtn = document.getElementById('readmeBtn');
-    const extensionBtn = document.getElementById('extensionBtn'); // New button
+    const extensionBtn = document.getElementById('extensionBtn');
     const readmeModal = document.getElementById('readmeModal');
     const modalContent = document.getElementById('modalContent');
     const closeModal = document.getElementById('closeModal');
     
-    // NEW: Event listener for the extension button
+    // MODIFIED: Event listener for the extension button to link to the repo
     extensionBtn.addEventListener('click', () => {
-        // !!! IMPORTANT: Replace this placeholder with the actual URL to your extension or zip file.
-        const extensionUrl = 'https://github.com/your-repo/your-extension.zip'; 
+        const extensionUrl = 'https://github.com/CortexStar/Audit-Extension-.git'; 
         window.open(extensionUrl, '_blank');
     });
 
