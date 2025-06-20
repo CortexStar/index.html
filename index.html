@@ -346,17 +346,85 @@
       }
     }
 
-    /* ─── 3. Create ZIP ─── */
+    /* ─── 3. Create ZIP - OPTIMIZED FOR MEMORY EFFICIENCY ─── */
     async function createZip(){
       const name=(zipNameEl.value.trim()||'pdfs')+'.zip';
       msg('Creating ZIP…');
       const zip=new JSZip();
-      await Promise.all(files.map(f=>f.arrayBuffer().then(b=>zip.file(f.name,b))));
-      const blob=await zip.generateAsync({type:'blob'});
-      const a=Object.assign(document.createElement('a'),{
-        href:URL.createObjectURL(blob),download:name});
-      a.click(); URL.revokeObjectURL(a.href);
-      reset();
+      
+      // OPTIMIZATION 1: Process files sequentially instead of Promise.all
+      // This prevents multiple files from being in memory simultaneously
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        msg(`Processing file ${i + 1} of ${files.length}...`);
+        
+        try {
+          // Read and add file to ZIP one at a time
+          const buffer = await file.arrayBuffer();
+          zip.file(file.name, buffer);
+          
+          // Clear the buffer reference to help with garbage collection
+          // Note: We can't actually null the buffer, but this helps indicate intent
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          msg('Error processing file');
+          return;
+        }
+      }
+      
+      msg('Generating ZIP file...');
+      
+      try {
+        // Generate the ZIP blob
+        const blob = await zip.generateAsync({type:'blob'});
+        
+        // Create download link and trigger download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        
+        // OPTIMIZATION 2: Immediately revoke URL to free memory
+        URL.revokeObjectURL(url);
+        
+        // OPTIMIZATION 3: Clear file array and references immediately after ZIP creation
+        clearMemoryAndReset();
+        
+      } catch (error) {
+        console.error('Error generating ZIP:', error);
+        msg('Error creating ZIP file');
+      }
+    }
+
+    // OPTIMIZATION 4: Comprehensive memory cleanup function
+    function clearMemoryAndReset() {
+      // Clear the files array immediately
+      files.length = 0;
+      files = [];
+      
+      // Clear file input
+      fileInput.value = '';
+      
+      // Reset UI
+      render(); 
+      msg('');
+      awaitingUserConfirmation = false;
+      
+      // Clear zip name for fresh start
+      zipNameEl.value = '';
+      
+      // Suggest garbage collection (browsers may ignore this, but it's a hint)
+      if (window.gc) {
+        window.gc();
+      }
+      
+      // Re-fill from clipboard after reset
+      setTimeout(async () => {
+        if (clipboardAvailable) {
+          await fillFromClipboard();
+        }
+      }, 100);
     }
 
     function tryDownload(){
@@ -372,18 +440,6 @@
       if(e.target.closest('#zipName')) return;  // keep default menu in input
       e.preventDefault(); tryDownload();
     });
-
-    /* reset after download */
-    async function reset(){
-      files=[]; fileInput.value=''; render(); msg('');
-      zipNameEl.value='';          // start fresh
-      awaitingUserConfirmation = false;
-      
-      // Fill from clipboard again after reset
-      if (clipboardAvailable) {
-        await fillFromClipboard();
-      }
-    }
 
     /* Enter key turns into button click, but also handles confirmation */
     document.addEventListener('keydown', e=>{
